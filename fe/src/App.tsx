@@ -19,8 +19,8 @@ type FormData = {
   firstName: string;
   lastName: string;
   wheels: "2" | "4" | "";
-  vehicleType: string;
-  vehicleModel: string;
+  vehicleType: VehicleType | null;
+  vehicleModel: VehicleModel | null;
   startDate: Date | null;
   endDate: Date | null;
 };
@@ -30,17 +30,24 @@ type TouchedFields = {
   endDate: boolean;
 };
 
-const vehicleTypeMap: Record<string, string[]> = {
-  "2": ["Scooter", "Bike"],
-  "4": ["Sedan", "SUV"],
+type VehicleType = {
+  id: number;
+  name: string;
+  wheels: number;
 };
 
-const vehicleModelMap: Record<string, string[]> = {
-  Scooter: ["Activa", "Dio"],
-  Bike: ["Pulsar", "Apache"],
-  Sedan: ["City", "Verna"],
-  SUV: ["Creta", "Fortuner"],
+type VehicleModel = {
+  id: number;
+  model: string;
+  vehicleTypeId: number;
 };
+
+type DateErrors = {
+  startDate?: string;
+  endDate?: string;
+};
+
+// Update the errors state
 
 export default function App() {
   const [step, setStep] = useState(0);
@@ -48,61 +55,28 @@ export default function App() {
     firstName: "",
     lastName: "",
     wheels: "",
-    vehicleType: "",
-    vehicleModel: "",
+    vehicleType: null,
+    vehicleModel: null,
     startDate: null,
     endDate: null,
   });
-
-  const [vehicleTypes, setVehicleTypes] = useState<string[]>([]);
-  const [vehicleModels, setVehicleModels] = useState<string[]>([]);
-  const [errors, setErrors] = useState({
-    startDate: "",
-    endDate: "",
-  });
-
+  const [errors, setErrors] = useState<DateErrors>({});
+  const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
+  const [vehicleModels, setVehicleModels] = useState<VehicleModel[]>([]);
   const [touched, setTouched] = useState<TouchedFields>({
     startDate: false,
     endDate: false,
   });
 
-  useEffect(() => {
-    if (formData.wheels) {
-      setVehicleTypes(vehicleTypeMap[formData.wheels]);
-    }
-  }, [formData.wheels]);
-
-  useEffect(() => {
-    if (formData.vehicleType) {
-      setVehicleModels(vehicleModelMap[formData.vehicleType]);
-    }
-  }, [formData.vehicleType]);
-
-  useEffect(() => {
-    const savedData = localStorage.getItem("data");
-    if (savedData) {
-      const parsedData = JSON.parse(savedData);
-      const restoredData: FormData = {
-        ...parsedData,
-        startDate: parsedData.startDate ? new Date(parsedData.startDate) : null,
-        endDate: parsedData.endDate ? new Date(parsedData.endDate) : null,
-      };
-      setFormData(restoredData);
-
-      // Only set touched state for dates that exist in stored data
-      if (restoredData.startDate || restoredData.endDate) {
-        setTouched({
-          startDate: restoredData.startDate !== null,
-          endDate: restoredData.endDate !== null,
-        });
-        validateDates(restoredData);
-      }
-    }
-  }, []);
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState<{
+    text: string;
+    type: "success" | "error";
+  } | null>(null);
 
   const nextStep = () => {
     if (step === 4) {
-      submitFormData(formData);
+      bookVehicle();
       localStorage.removeItem("data");
     } else {
       setStep((prev) => prev + 1);
@@ -140,9 +114,9 @@ export default function App() {
       case 1:
         return formData.wheels !== "";
       case 2:
-        return formData.vehicleType !== "";
+        return formData.vehicleType !== null;
       case 3:
-        return formData.vehicleModel !== "";
+        return formData.vehicleModel !== null;
       case 4:
         return (
           formData.startDate !== null &&
@@ -191,12 +165,103 @@ export default function App() {
     return Object.keys(dateErrors).length === 0;
   };
 
-  const submitFormData = async (data: FormData) => {
+  const getVehicleType = async () => {
     try {
-      // Your API call implementation
-      console.log("Form submitted successfully", data);
-    } catch (error) {
-      console.error("Error submitting form:", error);
+      setIsLoading(true);
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/vehicle/${formData.wheels}/type`
+      );
+      if (!res.ok) {
+        throw new Error("Failed to fetch vehicle types");
+      }
+      const data: VehicleType[] = await res.json();
+      setVehicleTypes(data);
+    } catch (err) {
+      setMessage({
+        text:
+          err instanceof Error ? err.message : "Failed to load vehicle types",
+        type: "error",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getVehicleModel = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/vehicle/${
+          formData.vehicleType?.id
+        }/model`
+      );
+      if (!res.ok) {
+        throw new Error("Failed to fetch vehicle models");
+      }
+      const data: VehicleModel[] = await res.json();
+      setVehicleModels(data);
+    } catch (err) {
+      setMessage({
+        text:
+          err instanceof Error ? err.message : "Failed to load vehicle models",
+        type: "error",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const bookVehicle = async () => {
+    setIsLoading(true);
+    try {
+      const body = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        vehicleId: formData.vehicleModel?.id,
+        startDate: formData.startDate?.toISOString(),
+        endDate: formData.endDate?.toISOString(),
+      };
+
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/vehicle/book`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        setMessage({ text: result.message || "Booking failed", type: "error" });
+        return false;
+      }
+
+      if (result.message) {
+        setMessage({
+          text: result.message,
+          type: "success",
+        });
+        setStep(5);
+        // Clear form data after successful booking
+        setFormData({
+          firstName: "",
+          lastName: "",
+          wheels: "",
+          vehicleType: null,
+          vehicleModel: null,
+          startDate: null,
+          endDate: null,
+        });
+        return true;
+      }
+    } catch (err) {
+      setMessage({
+        text:
+          err instanceof Error ? err.message : "An unexpected error occurred",
+        type: "error",
+      });
+      return false;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -221,7 +286,15 @@ export default function App() {
         return (
           <RadioGroup
             value={formData.wheels}
-            onChange={(e) => handleInputChange("wheels", e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              handleInputChange("wheels", value);
+              setFormData((prev) => ({
+                ...prev,
+                vehicleType: null,
+                vehicleModel: null,
+              }));
+            }}
           >
             <FormControlLabel value="2" control={<Radio />} label="2 Wheeler" />
             <FormControlLabel value="4" control={<Radio />} label="4 Wheeler" />
@@ -230,15 +303,24 @@ export default function App() {
       case 2:
         return (
           <RadioGroup
-            value={formData.vehicleType}
-            onChange={(e) => handleInputChange("vehicleType", e.target.value)}
+            value={formData.vehicleType?.name || ""}
+            onChange={(e) => {
+              const selectedType = vehicleTypes.find(
+                (type) => type.name === e.target.value
+              );
+              setFormData((prev) => ({
+                ...prev,
+                vehicleType: selectedType || null,
+                vehicleModel: null,
+              }));
+            }}
           >
             {vehicleTypes.map((type) => (
               <FormControlLabel
-                key={type}
-                value={type}
+                key={type.id}
+                value={type.name}
                 control={<Radio />}
-                label={type}
+                label={type.name}
               />
             ))}
           </RadioGroup>
@@ -246,15 +328,23 @@ export default function App() {
       case 3:
         return (
           <RadioGroup
-            value={formData.vehicleModel}
-            onChange={(e) => handleInputChange("vehicleModel", e.target.value)}
+            value={formData.vehicleModel?.model || ""}
+            onChange={(e) => {
+              const selectedModel = vehicleModels.find(
+                (model) => model.model === e.target.value
+              );
+              setFormData((prev) => ({
+                ...prev,
+                vehicleModel: selectedModel || null,
+              }));
+            }}
           >
             {vehicleModels.map((model) => (
               <FormControlLabel
-                key={model}
-                value={model}
+                key={model.id}
+                value={model.model}
                 control={<Radio />}
-                label={model}
+                label={model.model}
               />
             ))}
           </RadioGroup>
@@ -274,6 +364,7 @@ export default function App() {
                   onOpen={() =>
                     setTouched((prev) => ({ ...prev, startDate: true }))
                   }
+                  minDate={new Date()}
                 />
                 {touched.startDate && errors.startDate && (
                   <FormHelperText error>{errors.startDate}</FormHelperText>
@@ -290,6 +381,7 @@ export default function App() {
                   onOpen={() =>
                     setTouched((prev) => ({ ...prev, endDate: true }))
                   }
+                  minDate={formData.startDate || new Date()} // Add this
                 />
                 {touched.endDate && errors.endDate && (
                   <FormHelperText error>{errors.endDate}</FormHelperText>
@@ -303,16 +395,60 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    const savedData = localStorage.getItem("data");
+    if (savedData) {
+      const parsedData = JSON.parse(savedData);
+      const restoredData: FormData = {
+        ...parsedData,
+        startDate: parsedData.startDate ? new Date(parsedData.startDate) : null,
+        endDate: parsedData.endDate ? new Date(parsedData.endDate) : null,
+      };
+      setFormData(restoredData);
+
+      // Only set touched state for dates that exist in stored data
+      if (restoredData.startDate || restoredData.endDate) {
+        setTouched({
+          startDate: restoredData.startDate !== null,
+          endDate: restoredData.endDate !== null,
+        });
+        validateDates(restoredData);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (formData.wheels) {
+      getVehicleType();
+    }
+  }, [formData.wheels]);
+
+  useEffect(() => {
+    if (formData.vehicleType) {
+      getVehicleModel();
+    }
+  }, [formData.vehicleType]);
+
   return (
     <Stack spacing={4} sx={{ p: 4, maxWidth: 500, margin: "auto" }}>
+      {step < 5 && message && (
+        <Typography
+          color={message.type === "success" ? "success.main" : "error.main"}
+          sx={{ textAlign: "center", mb: 2 }}
+        >
+          {message.text}
+        </Typography>
+      )}
       {step < 5 && <Typography variant="h5">Step {step + 1}</Typography>}
       {renderStep()}
       {step === 5 ? (
         <div>
-          <h2>
-            Thank you! Your rental request has been submitted. We’ll confirm
-            your booking soon.
-          </h2>
+          <Typography
+            variant="h5"
+            sx={{ textAlign: "center", color: "success.main" }}
+          >
+            {message?.text}
+          </Typography>
         </div>
       ) : (
         <Stack direction="row" spacing={2} justifyContent="space-between">
@@ -324,9 +460,9 @@ export default function App() {
           <Button
             variant="contained"
             onClick={nextStep}
-            disabled={!isStepValid()}
+            disabled={!isStepValid() || isLoading}
           >
-            {step === 4 ? "Finish" : "Next"}
+            {isLoading ? "Processing..." : step === 4 ? "Finish" : "Next"}
           </Button>
         </Stack>
       )}
