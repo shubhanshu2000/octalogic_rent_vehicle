@@ -11,13 +11,60 @@ octalogic_rent_vehicle/
 └── README.md          # This file
 ```
 
-## Prerequisites
+## Setup Options
 
-- Node.js (v16 or higher)
+You can run this application in two ways:
+1. [Docker Setup](#docker-setup) - Quick start with Docker
+2. [Manual Setup](#manual-setup) - Step by step manual setup
+
+## Docker Setup
+
+### Prerequisites
 - Docker
-- pnpm (package manager)
+- Docker Compose
 
-## Database Setup
+### Quick Start
+1. Clone the repository
+2. Navigate to root directory
+3. Run:
+```bash
+docker-compose up --build
+```
+
+The applications will be available at:
+- Frontend: http://localhost:5173
+- Backend: http://localhost:3001
+- Database: localhost:5432
+
+### Docker Commands
+```bash
+# Start the application
+docker-compose up
+
+# Start in detached mode
+docker-compose up -d
+
+# Stop the application
+docker-compose down
+
+# Rebuild and start
+docker-compose up --build
+
+# Remove volumes (clean state)
+docker-compose down -v
+
+# View logs
+docker-compose logs -f
+```
+
+## Manual Setup
+
+### Prerequisites
+- Node.js (v16 or higher)
+- pnpm (package manager)
+- Docker (for PostgreSQL database)
+
+### Database Setup
 
 1. Start PostgreSQL using Docker:
 
@@ -44,7 +91,7 @@ docker ps
 - Username: postgres
 - Password: root
 
-## Backend Setup
+### Backend Setup
 
 1. Navigate to backend directory:
 
@@ -64,13 +111,19 @@ pnpm install
 DATABASE_URL="postgresql://postgres:root@localhost:5432/rentals"
 ```
 
-4. Seed the database:
+4. Run migrations:
+
+```bash
+pnpm prisma migrate dev
+```
+
+5. Seed the database:
 
 ```bash
 pnpm run db:seed
 ```
 
-5. Start the server:
+6. Start the server:
 
 ```bash
 pnpm run dev
@@ -78,7 +131,7 @@ pnpm run dev
 
 The backend will start on http://localhost:3001
 
-## Frontend Setup
+### Frontend Setup
 
 1. Navigate to frontend directory:
 
@@ -143,8 +196,50 @@ The frontend will start on http://localhost:5173
 - pnpm for package management
 - ESLint for code linting
 
+## Development
+
+### Running Tests
+```bash
+# Backend tests
+cd be && pnpm test
+
+# Frontend tests
+cd fe && pnpm test
+```
+
+### Database Management
+```bash
+# Access PostgreSQL CLI
+docker exec -it postgres psql -U postgres -d rentals
+
+# View Prisma Studio
+cd be && pnpm prisma studio
+```
+
 ## Troubleshooting
 
+### Docker Issues
+1. If containers fail to start:
+```bash
+# Remove all containers and volumes
+docker-compose down -v
+
+# Rebuild from scratch
+docker-compose up --build
+```
+
+2. To check container logs:
+```bash
+# All containers
+docker-compose logs
+
+# Specific container
+docker-compose logs backend
+docker-compose logs frontend
+docker-compose logs postgres
+```
+
+### Other Issues
 1. If PostgreSQL container fails to start:
 
 ```bash

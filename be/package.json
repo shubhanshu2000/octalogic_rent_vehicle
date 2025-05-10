@@ -8,7 +8,8 @@
     "dev": "tsx src/index.ts",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "prisma:migrate": "prisma migrate deploy"
   },
   "keywords": [],
   "author": "",
